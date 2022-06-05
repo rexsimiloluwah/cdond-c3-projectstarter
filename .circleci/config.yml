@@ -168,7 +168,7 @@ jobs:
           command: | 
             cd .circleci/ansible
             cat inventory.txt
-            ansible-playbook -i inventory.txt --key-file ~/.ssh/id_rsa_90ae559925ae3c5ac3218a9144d1332c configure-server.yml
+            ansible-playbook -i inventory.txt configure-server.yml
 
       - destroy-environment:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
