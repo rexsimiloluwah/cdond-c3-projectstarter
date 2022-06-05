@@ -3,10 +3,10 @@
 #   become: yes
 #   apt: 
 #     update_cache: yes 
-- name: Upgrade apt packages
-  become: yes
-  apt: 
-    upgrade: yes 
+# - name: Upgrade apt packages
+#   become: yes
+#   apt: 
+#     upgrade: yes 
 
 - name: Remove unused dependencies
   become: yes
