@@ -15,7 +15,7 @@ commands:
           name: Destroy environments
           when: on_fail
           command: |
-            WORKFLOW_ID = << parameters.workflow_id >> 
+            export WORKFLOW_ID = << parameters.workflow_id >> 
             aws cloudformation delete-stack --stack-name udapeople-backend-${WORKFLOW_ID}
             aws cloudformation delete-stack --stack-name udapeople-frontend-${WORKFLOW_ID}
 
@@ -123,6 +123,7 @@ jobs:
       - image: amazon/aws-cli
     steps:
       - checkout 
+      - yum install -y tar gzip
       - run: 
           name: Ensure back-end infrastructure exists 
           command: | 
