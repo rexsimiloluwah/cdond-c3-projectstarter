@@ -167,7 +167,6 @@ jobs:
       - run: 
           name: Configure server
           command: | 
-            cat ~/.ssh/id_rsa_80e0739afebb211996c8fe605af793c1
             cd .circleci/ansible
             ansible-playbook -i inventory.txt --key-file ~/.ssh/id_rsa_80e0739afebb211996c8fe605af793c1 configure-server.yml
        
