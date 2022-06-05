@@ -15,7 +15,7 @@ commands:
           name: Destroy environments
           when: on_fail
           command: |
-            export WORKFLOW_ID = << parameters.workflow_id >> 
+            export WORKFLOW_ID=<< parameters.workflow_id >> 
             aws cloudformation delete-stack --stack-name udapeople-backend-${WORKFLOW_ID}
             aws cloudformation delete-stack --stack-name udapeople-frontend-${WORKFLOW_ID}
 
