@@ -153,7 +153,7 @@ jobs:
     steps: 
       - checkout 
       - add_ssh_keys:
-          fingerprints: ["80:e0:73:9a:fe:bb:21:19:96:c8:fe:60:5a:f7:93:c1"]
+          fingerprints: ["90:ae:55:99:25:ae:3c:5a:c3:21:8a:91:44:d1:33:2c"]
       - attach_workspace:
           at: ~/
       # Install Ansible
@@ -168,7 +168,7 @@ jobs:
           command: | 
             cd .circleci/ansible
             cat inventory.txt
-            ansible-playbook -i inventory.txt --key-file ~/.ssh/id_rsa_80e0739afebb211996c8fe605af793c1 configure-server.yml
+            ansible-playbook -i inventory.txt --key-file ~/.ssh/id_rsa_90ae559925ae3c5ac3218a9144d1332c configure-server.yml
 
       - destroy-environment:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
