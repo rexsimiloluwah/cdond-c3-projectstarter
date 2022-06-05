@@ -145,8 +145,8 @@ jobs:
           paths:
             - project/.circleci/ansible/inventory.txt
 
-      # - destroy-environment:
-      #     workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - destroy-environment:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   configure-infrastructure:
     docker: 
@@ -154,7 +154,7 @@ jobs:
     steps: 
       - checkout 
       - add_ssh_keys:
-          fingerprints: ["fc:67:d1:38:09:67:a8:4c:14:dd:09:b2:30:a8:6e:44"]
+          fingerprints: ["25:44:64:a1:44:2f:6c:02:88:39:dc:a4:9f:36:2e:3c"]
       - attach_workspace:
           at: ~/
       # Install Ansible
@@ -171,8 +171,8 @@ jobs:
             cat inventory.txt
             ansible-playbook -i inventory.txt configure-server.yml
 
-      # - destroy-environment:
-      #     workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - destroy-environment:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
        
 workflows:
   default: 
