@@ -163,6 +163,7 @@ jobs:
           command: | 
             apk add --update ansible
             ansible --version
+            pip install awscli
       # Run the Ansible playbook 
       - run: 
           name: Configure server
