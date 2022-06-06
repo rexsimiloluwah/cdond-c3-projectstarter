@@ -28,6 +28,7 @@ commands:
           command: |
             export WORKFLOW_ID=<< parameters.workflow_id >> 
             aws cloudformation delete-stack --stack-name udapeople-backend-${WORKFLOW_ID}
+            aws s3 rm s3://udapeople-${WORKFLOW_ID} --recursive
             aws cloudformation delete-stack --stack-name udapeople-frontend-${WORKFLOW_ID}
 
   revert-database-migrations: 
@@ -293,8 +294,43 @@ jobs:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
       - revert-database-migrations: 
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
-      
-                
+  
+  # Smoke test phase 
+  smoke-test: 
+    docker: 
+      - image: alpine:latest 
+    steps: 
+      - checkout 
+      - attach_workspace:
+          at: ~/ 
+      - run: 
+          name: Install dependencies 
+          command: |
+            apk add --update curl 
+      - run:
+          name: Backend smoke test 
+          command: |
+            export API_URL=$(cat backend-url.txt)
+            echo "${API_URL}"
+            if curl "${API_URL}/api/status" | grep "ok"
+            then 
+              return 0
+            else 
+              return 1
+            fi
+
+      - run: 
+          name: Frontend smoke test 
+          command: |
+            export FRONTEND_URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website-us-east-1.amazonaws.com/#/employees"
+            echo ${FRONTEND_URL}
+            if curl -s ${URL} | grep "Welcome"
+            then  
+              return 1
+            else
+              return 1
+            fi
+         
 workflows:
   default: 
     jobs:
@@ -330,3 +366,7 @@ workflows:
       - deploy-backend:
           requires:
             - "run-migrations"
+      - smoke-test:
+          requires:
+            - "deploy-frontend"
+            - "deploy-backend"

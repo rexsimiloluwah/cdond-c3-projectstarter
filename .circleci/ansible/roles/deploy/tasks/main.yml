@@ -29,6 +29,7 @@
 - name: Stop any running process 
   shell: |
     pm2 stop default
+  ignore_errors: true
 
 - name: Start server 
   shell: |
