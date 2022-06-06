@@ -32,6 +32,7 @@
   ignore_errors: true
 
 - name: Start server 
+  become: true
   shell: |
     cd /home/ubuntu/udapeople/backend 
     pm2 start npm -- run "start:prod"
