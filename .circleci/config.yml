@@ -3,6 +3,19 @@ version: 2.1
 orbs:
   slack: circleci/slack@4.1
 
+executors: 
+  python: 
+    docker: 
+      - image: python:3.7-alpine3.11 
+  
+  aws: 
+    docker: 
+      - image: amazon/aws-cli
+
+  node: 
+    docker: 
+      - image: circleci/node:13.8.0
+
 commands:
   destroy-environment:
     description: Destroy back-end and front-end cloudformation stacks given a workflow ID.
@@ -21,8 +34,7 @@ commands:
 
 jobs: 
   build-backend: 
-    docker: 
-     - image: circleci/node:13.8.0
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -38,8 +50,7 @@ jobs:
           key: backend-build 
   
   build-frontend: 
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -55,8 +66,7 @@ jobs:
           key: frontend-build 
 
   test-frontend: 
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -69,8 +79,7 @@ jobs:
             npm run test
 
   test-backend: 
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -89,8 +98,7 @@ jobs:
           template: success_tagged_deploy_1
 
   scan-frontend:
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -104,8 +112,7 @@ jobs:
             npm audit fix --audit-level=critical 
 
   scan-backend: 
-    docker: 
-      - image: circleci/node:13.8.0
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -119,8 +126,7 @@ jobs:
             npm audit fix --audit-level=critical
 
   deploy-infrastructure: 
-    docker: 
-      - image: amazon/aws-cli
+    executor: aws
     steps:
       - checkout 
       - run: yum install -y tar gzip
@@ -149,29 +155,34 @@ jobs:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   configure-infrastructure:
-    docker: 
-      - image: python:3.7-alpine3.11 
+    executor: python
     steps: 
       - checkout 
       - add_ssh_keys:
           fingerprints: ["25:44:64:a1:44:2f:6c:02:88:39:dc:a4:9f:36:2e:3c"]
+          
       - attach_workspace:
           at: ~/
-      # Install Ansible
+
+      # Install Dependencies
       - run: 
           name: Install dependencies 
           command: | 
             apk add --update ansible
             ansible --version
             pip install awscli
+      
+      - run: 
+          name: View inventory.txt 
+          command: |
+            cat .circleci/ansible/inventory.txt
+
       # Run the Ansible playbook 
       - run: 
           name: Configure server
           command: | 
             cd .circleci/ansible
-            cat inventory.txt
-            cat ~/.ssh/id_rsa_254464a1442f6c028839dca49f362e3c
-            ansible-playbook -i inventory.txt --key-file ~/.ssh/id_rsa_254464a1442f6c028839dca49f362e3c configure-server.yml
+            ansible-playbook -i inventory.txt configure-server.yml
 
       - destroy-environment:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
