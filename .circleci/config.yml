@@ -7,11 +7,9 @@ executors:
   python: 
     docker: 
       - image: python:3.7-alpine3.11 
-  
   aws: 
     docker: 
       - image: amazon/aws-cli
-
   node: 
     docker: 
       - image: circleci/node:13.8.0
@@ -32,6 +30,23 @@ commands:
             aws cloudformation delete-stack --stack-name udapeople-backend-${WORKFLOW_ID}
             aws cloudformation delete-stack --stack-name udapeople-frontend-${WORKFLOW_ID}
 
+  revert-database-migrations: 
+    description: Revert database migration when job fails 
+    parameters: 
+      workflow_id: 
+        type: string 
+
+    steps: 
+      - run: 
+          name: Revert database migration 
+          when: on_fail 
+          command: |
+            VALUE=$(curl --insecure https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_<< parameters.workflow_id >>)
+            echo $VALUE 
+            if [[ "$VALUE" == '1' ]]
+            then 
+              npm run migrations:revert
+            fi
 jobs: 
   build-backend: 
     executor: node
@@ -135,22 +150,21 @@ jobs:
           command: | 
             echo ${AWS_DEFAULT_REGION}
             aws cloudformation deploy --template-file .circleci/files/backend.yml --stack-name "udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}" --tags project=udapeople
-
       - run: 
           name: Ensure front-end infrastructure exists 
           command: | 
             aws cloudformation deploy --template-file .circleci/files/frontend.yml --stack-name "udapeople-frontend-${CIRCLE_WORKFLOW_ID:0:7}" --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}" --tags project=udapeople
-
       - run: 
           name: Add back-end ip to Ansible inventory 
           command: |
-            aws ec2 describe-instances --query 'Reservations[*].Instances[*].PublicIpAddress' --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" --output text >> .circleci/ansible/inventory.txt 
-
+            BACKEND_IP=$(aws ec2 describe-instances --query 'Reservations[*].Instances[*].PublicIpAddress' --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" --output text)
+            echo BACKEND_IP >> .circleci/ansible/inventory.txt  
+            echo http://${BACKEND_IP}:3030 > backend-url.txt 
+            cat backend-url.txt
       - persist_to_workspace:
           root: ~/
           paths:
             - project/.circleci/ansible/inventory.txt
-
       - destroy-environment:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
 
@@ -160,10 +174,8 @@ jobs:
       - checkout 
       - add_ssh_keys:
           fingerprints: ["25:44:64:a1:44:2f:6c:02:88:39:dc:a4:9f:36:2e:3c"]
-          
       - attach_workspace:
           at: ~/
-
       # Install Dependencies
       - run: 
           name: Install dependencies 
@@ -171,22 +183,111 @@ jobs:
             apk add --update ansible
             ansible --version
             pip install awscli
-      
       - run: 
           name: View inventory.txt 
           command: |
             cat .circleci/ansible/inventory.txt
-
       # Run the Ansible playbook 
       - run: 
           name: Configure server
           command: | 
             cd .circleci/ansible
             ansible-playbook -i inventory.txt configure-server.yml
+      - destroy-environment:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+  
+  # Deploy phase 
+  run-migrations:
+    executor: node 
+    steps:
+      - checkout 
+      - restore_cache:
+          keys: ['backend-build']
+      - run:
+          name: Run database migrations 
+          command: |
+            cd backend
+            npm install 
+            npm run migrations > migrations_dump.txt
+      # Send migration status to third-party key-value store 
+      - run: 
+          name: Send migration status to kvdb.io 
+          command: |
+            if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
+            then
+              curl https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
+            fi
+      - destroy-environment:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      
+
+  deploy-frontend:
+    executor: node
+    steps:
+      - checkout 
+      - attach_workspace:
+          at: ~/ 
+      # Get backend url
+      - run: 
+          name: Get backend URL 
+          command: |
+            export API_URL=$(cat backend-url.txt)
+            echo "API_URL = ${API_URL}"
+            echo "API_URL=${API_URL}" >> frontend/.env 
+            cat frontend/.env
+
+      # Deploy frontend objects 
+      - run:  
+          name: Deploy frontend objects
+          working_directory: ~/frontend 
+          command: | 
+            npm install 
+            npm run build 
+            tar -czvf frontend-artifact-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive 
 
       - destroy-environment:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
-       
+      - revert-database-migrations:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+
+  deploy-backend: 
+    executor: python 
+    steps: 
+      - checkout 
+      - attach_workspace:
+          at: ~/ 
+      - add_ssh_keys:
+          fingerprints: ["25:44:64:a1:44:2f:6c:02:88:39:dc:a4:9f:36:2e:3c"]
+      # Install dependencies 
+      - run: 
+          name: Install necessary dependencies 
+          command: |
+            apk add --update tar gzip ansible nodejs npm curl rsync openssh
+            pip install awscli 
+            ansible --version 
+      # Deploy backend 
+      - run: 
+          name: Deploy backend 
+          command: |
+            cd backend 
+            npm i 
+            npm run build 
+            cd .. 
+            tar -C backend -czvf artifact.tar.gz . 
+            cd .circleci/ansible
+            echo "Verifying contents of the inventory.txt file"
+            cat inventory.txt 
+            ansible-playbook -i inventory.txt deploy-backend.yml
+      # On failure 
+      - destroy-environment: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      
+                
 workflows:
   default: 
     jobs:
@@ -213,3 +314,12 @@ workflows:
       - configure-infrastructure: 
           requires:
             - "deploy-infrastructure"
+      - run-migrations:
+          requires:
+            - "configure-infrastructure"
+      - deploy-frontend:
+          requires:
+            - "run-migrations" 
+      - deploy-backend:
+          requires:
+            - "run-migrations"

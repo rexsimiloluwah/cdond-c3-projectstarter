@@ -1,5 +1,5 @@
 ---
-- name: "configuration play." 
+- name: "Configure Server Playbook" 
   hosts: web
   user: ubuntu
   become: yes
