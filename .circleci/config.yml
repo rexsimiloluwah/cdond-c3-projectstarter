@@ -344,7 +344,7 @@ jobs:
           command: |
             export FRONTEND_URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website-us-east-1.amazonaws.com/#/employees"
             echo ${FRONTEND_URL}
-            if curl -s ${URL} | grep "Welcome"
+            if curl -s ${FRONTEND_URL} | grep "Welcome"
             then  
               return 0
             else
@@ -441,3 +441,9 @@ workflows:
           requires:
             - "deploy-frontend"
             - "deploy-backend"
+      - cloudfront-update: 
+          requires:
+            - "smoke-test"
+      - cleanup: 
+          requires:
+            - "cloudfront-update"
