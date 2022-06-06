@@ -26,15 +26,15 @@
     npm install 
     npm run build
 
-- name: Stop any running process 
+- name: Stop all running processes
   shell: |
-    pm2 stop default
+    pm2 stop all
   ignore_errors: true
 
 - name: Start server 
   become: true
   shell: |
     cd /home/ubuntu/udapeople/backend 
-    pm2 start npm -- run "start:prod"
+    pm2 start npm -- start
   environment: 
     ENVIRONMENT: production

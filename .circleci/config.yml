@@ -46,6 +46,8 @@ commands:
             echo $VALUE 
             if [[ "$VALUE" == '1' ]]
             then 
+              cd backend 
+              npm install
               npm run migrations:revert
             fi
 jobs: 
@@ -211,13 +213,14 @@ jobs:
             cd backend
             npm install 
             npm run migrations > migrations_dump.txt
+            cat migrations_dump.txt
       # Send migration status to third-party key-value store 
       - run: 
           name: Send migration status to kvdb.io 
           command: |
             if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
             then
-              curl https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
+              curl https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_${CIRCLE_WORKFLOW_ID:0:7} -d '1'
             fi
       # - destroy-environment:
       #     workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
