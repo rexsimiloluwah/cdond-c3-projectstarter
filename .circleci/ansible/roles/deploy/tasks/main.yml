@@ -12,7 +12,13 @@
 - name: List content 
   become: yes
   shell: |
+    echo "Listing content"
     ls /home/ubuntu/udapeople-backend
+  register: result 
+
+- name: Print content 
+  debug: 
+    var: result
 
 - name: Build backend 
   become: yes
