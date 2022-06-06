@@ -6,7 +6,6 @@
   synchronize: 
     src: ../../backend 
     dest: /home/ubuntu/udapeople-backend 
-    become: true 
     recursive: true 
 
 - name: Build backend 

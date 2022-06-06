@@ -218,10 +218,10 @@ jobs:
             then
               curl https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
             fi
-      - destroy-environment:
-          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
-      # - revert-database-migrations:
+      # - destroy-environment:
       #     workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
       
   deploy-frontend:
     executor: node
@@ -241,8 +241,8 @@ jobs:
       # Deploy frontend objects 
       - run:  
           name: Deploy frontend objects
-          working_directory: ~/frontend 
           command: | 
+            cd frontend
             npm install 
             npm run build 
             tar -czvf frontend-artifact-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
