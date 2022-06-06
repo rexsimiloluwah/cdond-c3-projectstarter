@@ -3,27 +3,26 @@
   shell: env 
 
 - name: Synchronize backend files 
-  become: yes
+  become: true
   synchronize: 
     src: ../../backend 
-    dest: /home/ubuntu/udapeople-backend 
+    dest: /home/ubuntu/udapeople
     recursive: true 
 
-- name: List content 
-  become: yes
-  shell: |
-    echo "Listing content"
-    ls /home/ubuntu/udapeople-backend
-  register: result 
+# - name: List directory content 
+#   become: yes
+#   shell: |
+#     ls /home/ubuntu/udapeople/backend
+#   register: result 
 
-- name: Print content 
-  debug: 
-    var: result
+# - name: Print directory content 
+#   debug: 
+#     var: result
 
 - name: Build backend 
-  become: yes
+  become: true
   shell: |
-    cd /home/ubuntu/udapeople-backend 
+    cd /home/ubuntu/udapeople/backend
     npm install 
     npm run build
 
@@ -33,7 +32,7 @@
 
 - name: Start server 
   shell: |
-    cd /home/ubuntu/udapeople-backend 
+    cd /home/ubuntu/udapeople/backend 
     pm2 start npm -- run "start:prod"
   environment: 
     ENVIRONMENT: production
