@@ -3,12 +3,19 @@
   shell: env 
 
 - name: Synchronize backend files 
+  become: yes
   synchronize: 
     src: ../../backend 
     dest: /home/ubuntu/udapeople-backend 
     recursive: true 
 
+- name: List content 
+  become: yes
+  shell: |
+    ls /home/ubuntu/udapeople-backend
+
 - name: Build backend 
+  become: yes
   shell: |
     cd /home/ubuntu/udapeople-backend 
     npm install 

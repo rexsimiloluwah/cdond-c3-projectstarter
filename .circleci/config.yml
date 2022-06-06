@@ -224,11 +224,17 @@ jobs:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
       
   deploy-frontend:
-    executor: node
+    executor: python
     steps:
       - checkout 
       - attach_workspace:
           at: ~/ 
+      - run: 
+          name: Install dependencies 
+          command: |
+            apk add --update nodejs npm curl 
+            pip install awscli 
+            aws --version
       # Get backend url
       - run: 
           name: Get backend URL 
@@ -243,6 +249,7 @@ jobs:
           name: Deploy frontend objects
           command: | 
             cd frontend
+            ls 
             npm install 
             npm run build 
             tar -czvf frontend-artifact-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
