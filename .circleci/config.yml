@@ -371,6 +371,14 @@ jobs:
           command: |
             cd .circleci/files
             aws cloudformation deploy --template-file cloudfront.yml --stack-name CloudfrontStack-${CIRCLE_WORKFLOW_ID:0:5} --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:7}" --tags project=udapeople
+            # Fetching the old workflow ID 
+            export OldWorkflowID=$(aws cloudformation list-exports --query "Exports[?Name==\`WorkflowID\`].Value" --no-paginate --output text)
+            echo $OldWorkflowID > oldworkflowid.txt  
+            echo "Old Workflow ID: $(cat oldworkflowid.txt)"
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - "oldworkflowid.txt"
       # On failure 
       - destroy-environment: 
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
@@ -381,6 +389,8 @@ jobs:
     executor: aws 
     steps: 
       - checkout 
+      - attach_workspace:
+          at: ~/
       - run: 
           name: Install dependencies 
           command: |
@@ -389,13 +399,14 @@ jobs:
       - run: 
           name: Get old stack workflow ID 
           command: |  
-            export OldWorkflowID=$(aws cloudformation list-exports --query "Exports[?Name==\`WorkflowID\`].Value" --no-paginate --output text)
+            export OldWorkflowID=$(cat oldworkflowid.txt)
             echo $OldWorkflowID
             export STACKS=($(aws cloudformation list-stacks --query "StackSummaries[*].StackName" --stack-status-filter CREATE_COMPLETE --no-paginate --output text))
             echo StackNames: "${STACKS[@]}"
       - run: 
           name: Remove old stack and files 
           command: |
+            export OldWorkflowID=$(cat oldworkflowid.txt)
             if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
             then 
               echo "--Destroying old environments--"
