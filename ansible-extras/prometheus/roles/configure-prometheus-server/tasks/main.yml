@@ -25,6 +25,7 @@
   shell: > 
     mkdir /etc/prometheus 
     mkdir /var/lib/prometheus
+  ignore_errors: true
 
 - name: Move 'prometheus' binary to /usr/local/bin 
   become: yes
@@ -32,6 +33,7 @@
     src: /tmp/prometheus-2.19.0.linux-amd64/prometheus 
     dest: /usr/local/bin/prometheus 
     mode: '0777'
+    remote_src: yes
 
 - name: Move 'promtool' binary to /usr/local/bin 
   become: yes 
@@ -39,12 +41,23 @@
     src: /tmp/prometheus-2.19.0.linux-amd64/promtool 
     dest: /usr/local/bin/promtool 
     mode: '0777'
+    remote_src: yes
 
-- name: Move console and console_libraries to /etc/prometheus 
+- name: Move console to /etc/prometheus 
   become: yes 
-  shell: > 
-    cp -r /tmp/prometheus-2.19.0.linux-amd64/consoles /etc/prometheus 
-    cp -r /tmp/prometheus-2.19.0.linux-amd64/console_libraries /etc/prometheus
+  copy: 
+    src: /tmp/prometheus-2.19.0.linux-amd64/consoles 
+    dest: /etc/prometheus/consoles 
+    mode: '0777'
+    remote_src: yes 
+
+- name: Move console_libraries to /etc/prometheus 
+  become: yes 
+  copy: 
+    src: /tmp/prometheus-2.19.0.linux-amd64/console_libraries
+    dest: /etc/prometheus/console_libraries
+    mode: '0777'
+    remote_src: yes 
 
 - name: Create prometheus service configuration 
   become: yes

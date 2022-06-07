@@ -8,3 +8,4 @@
 
   roles:
     - configure-prometheus-server
+    - configure-alert-manager
