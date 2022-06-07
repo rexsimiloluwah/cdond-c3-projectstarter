@@ -407,7 +407,7 @@ jobs:
           name: Remove old stack and files 
           command: |
             export OldWorkflowID=$(cat .circleci/files/oldworkflowid.txt)
-            if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
+            if [[ "${CIRCLE_WORKFLOW_ID}" != "${OldWorkflowID}" ]]
             then 
               echo "--Destroying old environments--"
               export BUCKET_NAME="udapeople-${OldWorkflowID}"
