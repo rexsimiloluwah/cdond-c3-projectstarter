@@ -45,3 +45,24 @@
   shell: > 
     cp -r /tmp/prometheus-2.19.0.linux-amd64/consoles /etc/prometheus 
     cp -r /tmp/prometheus-2.19.0.linux-amd64/console_libraries /etc/prometheus
+
+- name: Create prometheus service configuration 
+  become: yes
+  copy: 
+    src: prometheus.service 
+    dest: /etc/systemd/system/
+
+- name: Copy prometheus.yml file 
+  become: yes
+  copy: 
+    src: prometheus.yml 
+    dest: /etc/prometheus 
+
+- name: Start the prometheus service 
+  become: yes
+  systemd:
+    state: restarted
+    daemon_reload: yes
+    name: prometheus
+    enabled: yes
+
