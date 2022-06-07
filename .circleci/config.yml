@@ -3,6 +3,17 @@ version: 2.1
 orbs:
   slack: circleci/slack@4.1
 
+executors: 
+  python: 
+    docker: 
+      - image: python:3.7-alpine3.11 
+  aws: 
+    docker: 
+      - image: amazon/aws-cli
+  node: 
+    docker: 
+      - image: circleci/node:13.8.0
+
 commands:
   destroy-environment:
     description: Destroy back-end and front-end cloudformation stacks given a workflow ID.
@@ -17,12 +28,31 @@ commands:
           command: |
             export WORKFLOW_ID=<< parameters.workflow_id >> 
             aws cloudformation delete-stack --stack-name udapeople-backend-${WORKFLOW_ID}
+            aws s3 rm s3://udapeople-${WORKFLOW_ID} --recursive
             aws cloudformation delete-stack --stack-name udapeople-frontend-${WORKFLOW_ID}
 
+  revert-database-migrations: 
+    description: Revert database migration when job fails 
+    parameters: 
+      workflow_id: 
+        type: string 
+
+    steps: 
+      - run: 
+          name: Revert database migration 
+          when: on_fail 
+          command: |
+            VALUE=$(curl --insecure https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_<< parameters.workflow_id >>)
+            echo $VALUE 
+            if [[ "$VALUE" == '1' ]]
+            then 
+              cd ~/project/backend 
+              npm install
+              npm run migration:revert
+            fi
 jobs: 
   build-backend: 
-    docker: 
-     - image: circleci/node:13.8.0
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -38,8 +68,7 @@ jobs:
           key: backend-build 
   
   build-frontend: 
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -55,8 +84,7 @@ jobs:
           key: frontend-build 
 
   test-frontend: 
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -69,8 +97,7 @@ jobs:
             npm run test
 
   test-backend: 
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -89,8 +116,7 @@ jobs:
           template: success_tagged_deploy_1
 
   scan-frontend:
-    docker: 
-      - image: circleci/node:13.8.0 
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -104,8 +130,7 @@ jobs:
             npm audit fix --audit-level=critical 
 
   scan-backend: 
-    docker: 
-      - image: circleci/node:13.8.0
+    executor: node
     steps: 
       - checkout 
       - restore_cache: 
@@ -119,60 +144,271 @@ jobs:
             npm audit fix --audit-level=critical
 
   deploy-infrastructure: 
-    docker: 
-      - image: amazon/aws-cli
+    executor: aws
     steps:
       - checkout 
       - run: yum install -y tar gzip
       - run: 
           name: Ensure back-end infrastructure exists 
           command: | 
+            echo ${AWS_DEFAULT_REGION}
             aws cloudformation deploy --template-file .circleci/files/backend.yml --stack-name "udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}" --tags project=udapeople
-
       - run: 
           name: Ensure front-end infrastructure exists 
           command: | 
             aws cloudformation deploy --template-file .circleci/files/frontend.yml --stack-name "udapeople-frontend-${CIRCLE_WORKFLOW_ID:0:7}" --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}" --tags project=udapeople
-
       - run: 
           name: Add back-end ip to Ansible inventory 
           command: |
-            aws ec2 describe-instances --query 'Reservations[*].Instances[*].PublicIpAddress' --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" --output text >> .circleci/ansible/inventory.txt 
-
+            BACKEND_IP=$(aws ec2 describe-instances --query 'Reservations[*].Instances[*].PublicIpAddress' --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" --output text)
+            echo $BACKEND_IP >> .circleci/ansible/inventory.txt  
+            echo http://${BACKEND_IP}:3030 > backend-url.txt 
+            cat backend-url.txt
       - persist_to_workspace:
           root: ~/
           paths:
             - project/.circleci/ansible/inventory.txt
-
+            - project/backend-url.txt
       - destroy-environment:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   configure-infrastructure:
-    docker: 
-      - image: python:3.7-alpine3.11 
+    executor: python
     steps: 
       - checkout 
       - add_ssh_keys:
-          fingerprints: ["80:e0:73:9a:fe:bb:21:19:96:c8:fe:60:5a:f7:93:c1"]
+          fingerprints: ["25:44:64:a1:44:2f:6c:02:88:39:dc:a4:9f:36:2e:3c"]
       - attach_workspace:
           at: ~/
-      # Install Ansible
+      # Install Dependencies
       - run: 
           name: Install dependencies 
           command: | 
-            apk add --update tar gzip ansible
+            apk add --update ansible
+            ansible --version
             pip install awscli
+      - run: 
+          name: View inventory.txt 
+          command: |
+            cat .circleci/ansible/inventory.txt
       # Run the Ansible playbook 
       - run: 
           name: Configure server
           command: | 
             cd .circleci/ansible
-            cat inventory.txt
             ansible-playbook -i inventory.txt configure-server.yml
+      - destroy-environment:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+  
+  # Deploy phase 
+  run-migrations:
+    executor: node 
+    steps:
+      - checkout 
+      - restore_cache:
+          keys: ['backend-build']
+      - run:
+          name: Run database migrations 
+          command: |
+            cd backend
+            npm install 
+            npm run migrations > migrations_dump.txt
+            cat migrations_dump.txt
+      # Send migration status to third-party key-value store 
+      - run: 
+          name: Send migration status to kvdb.io 
+          command: |
+            if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
+            then
+              curl https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_${CIRCLE_WORKFLOW_ID:0:7} -d '1'
+            fi
+      # - destroy-environment:
+      #     workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      
+  deploy-frontend:
+    executor: python
+    steps:
+      - checkout 
+      - attach_workspace:
+          at: ~/ 
+      - run: 
+          name: Install dependencies 
+          command: |
+            apk add --update nodejs npm curl tar gzip
+            pip install awscli 
+            aws --version
+      # Get backend url
+      - run: 
+          name: Get backend URL 
+          command: |
+            export API_URL=$(cat backend-url.txt)
+            echo "API_URL = ${API_URL}"
+            echo "API_URL=${API_URL}" >> frontend/.env 
+            cat frontend/.env
+
+      # Deploy frontend objects 
+      - run:  
+          name: Deploy frontend objects
+          command: | 
+            cd frontend
+            ls 
+            npm install 
+            npm run build 
+            tar -czvf frontend-artifact-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive 
 
       - destroy-environment:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
-       
+      - revert-database-migrations:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+
+  deploy-backend: 
+    executor: python 
+    steps: 
+      - checkout 
+      - attach_workspace:
+          at: ~/ 
+      - add_ssh_keys:
+          fingerprints: ["25:44:64:a1:44:2f:6c:02:88:39:dc:a4:9f:36:2e:3c"]
+      # Install dependencies 
+      - run: 
+          name: Install necessary dependencies 
+          command: |
+            apk add --update tar gzip ansible nodejs npm curl rsync openssh
+            pip install awscli 
+            ansible --version 
+      # Set environment variables 
+      - run: 
+          name: Set environment variables 
+          command: |
+            echo ENVIRONMENT=production > "backend/.env"
+            echo TYPEORM_CONNECTION=$TYPEORM_CONNECTION >> "backend/.env"
+            echo TYPEORM_MIGRATIONS_DIR=$TYPEORM_MIGRATIONS_DIR >> "backend/.env"
+            echo TYPEORM_MIGRATIONS=$TYPEORM_MIGRATIONS >> "backend/.env"
+            echo TYPEORM_ENTITIES=$TYPEORM_ENTITIES >> "backend/.env"
+            echo TYPEORM_HOST=$TYPEORM_HOST >> "backend/.env"
+            echo TYPEORM_DATABASE=$TYPEORM_DATABASE >> "backend/.env"
+            echo TYPEORM_USERNAME=$TYPEORM_USERNAME >> "backend/.env"
+            echo TYPEORM_PASSWORD=$TYPEORM_PASSWORD >> "backend/.env"
+            echo TYPEORM_PORT=$TYPEORM_PORT >> "backend/.env"
+            cat backend/.env
+
+      # Deploy backend 
+      - run: 
+          name: Deploy backend 
+          command: |
+            cd backend 
+            npm i 
+            npm run build 
+            cd .. 
+            tar -C backend -czvf artifact.tar.gz . 
+            cd .circleci/ansible
+            echo "Verifying contents of the inventory.txt file"
+            cat inventory.txt 
+            ansible-playbook -i inventory.txt deploy-backend.yml
+      # On failure 
+      - destroy-environment: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+  
+  # Smoke test phase 
+  smoke-test: 
+    executor: python
+    steps: 
+      - checkout 
+      - attach_workspace:
+          at: ~/ 
+      - run: 
+          name: Install dependencies 
+          command: |
+            apk add --update curl nodejs npm 
+            pip install awscli 
+            aws --version
+      - run:
+          name: Backend smoke test 
+          command: |
+            export API_URL=$(cat backend-url.txt)
+            echo "${API_URL}"
+            if curl "${API_URL}/api/status" | grep "ok"
+            then 
+              return 0
+            else 
+              return 1
+            fi
+
+      - run: 
+          name: Frontend smoke test 
+          command: |
+            export FRONTEND_URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website-us-east-1.amazonaws.com/#/employees"
+            echo ${FRONTEND_URL}
+            if curl -s ${FRONTEND_URL} | grep "Welcome"
+            then  
+              return 0
+            else
+              return 1
+            fi
+      # On failure 
+      - destroy-environment: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+  
+  cloudfront-update:
+    executor: python 
+    steps: 
+      - checkout 
+      - run: 
+          name: Install dependencies 
+          command: |
+            apk add --update curl tar gzip 
+            pip install awscli 
+            aws --version 
+      - run: 
+          name: Update cloudfront distribution 
+          command: |
+            cd .circleci/files
+            aws cloudformation deploy --template-file cloudfront.yml --stack-name CloudfrontStack-${CIRCLE_WORKFLOW_ID:0:5} --parameter-overrides WorkflowID="udapeople-${CIRCLE_WORKFLOW_ID:0:7}" --tags project=udapeople
+      # On failure 
+      - destroy-environment: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+
+  cleanup:
+    executor: aws 
+    steps: 
+      - checkout 
+      - run: 
+          name: Install dependencies 
+          command: |
+            yum -y install tar 
+            yum -y install gzip
+      - run: 
+          name: Get old stack workflow ID 
+          command: |  
+            export OldWorkflowID=$(aws cloudformation list-exports --query "Exports[?Name==\`WorkflowID\`].Value" --no-paginate --output text)
+            echo $OldWorkflowID
+            export STACKS=($(aws cloudformation list-stacks --query "StackSummaries[*].StackName" --stack-status-filter CREATE_COMPLETE --no-paginate --output text))
+            echo StackNames: "${STACKS[@]}"
+      - run: 
+          name: Remove old stack and files 
+          command: |
+            if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
+            then 
+              echo "--Destroying old environments--"
+              aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+              aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
+              aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
+            else
+              echo "--Ignoring destruction of old environments--"
+            fi
+      #On failure 
+      - destroy-environment: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+
 workflows:
   default: 
     jobs:
@@ -196,6 +432,57 @@ workflows:
             - "test-backend"
             - "scan-frontend"
             - "scan-backend"
+          filters:
+            branches:
+              only: [master]
+
       - configure-infrastructure: 
           requires:
             - "deploy-infrastructure"
+          filters:
+            branches:
+              only: [master]
+
+      - run-migrations:
+          requires:
+            - "configure-infrastructure"
+          filters:
+            branches:
+              only: [master]
+
+      - deploy-frontend:
+          requires:
+            - "run-migrations" 
+          filters:
+            branches:
+              only: [master]
+
+      - deploy-backend:
+          requires:
+            - "run-migrations"
+          filters:
+            branches:
+              only: [master]
+
+      - smoke-test:
+          requires:
+            - "deploy-frontend"
+            - "deploy-backend"
+          filters:
+            branches:
+              only: [master]
+
+      - cloudfront-update: 
+          requires:
+            - "smoke-test"
+          filters:
+            branches:
+              only: [master]
+
+      - cleanup:
+          requires:
+            - "cloudfront-update"
+          filters:
+            branches:
+              only: [master]
+            
