@@ -371,7 +371,12 @@ jobs:
           command: |
             cd .circleci/files
             aws cloudformation deploy --template-file cloudfront.yml --stack-name CloudfrontStack-${CIRCLE_WORKFLOW_ID:0:5} --parameter-overrides WorkflowID="udapeople-${CIRCLE_WORKFLOW_ID:0:7}" --tags project=udapeople
-  
+      # On failure 
+      - destroy-environment: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+
   cleanup:
     executor: python 
     steps: 
@@ -401,7 +406,12 @@ jobs:
             else
               echo "--Ignoring destruction of old environments--"
             fi
-
+      # On failure 
+      - destroy-environment: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-database-migrations: 
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+          
 workflows:
   default: 
     jobs:
