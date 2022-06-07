@@ -386,18 +386,17 @@ jobs:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   cleanup:
-    executor: python
+    executor: aws
     steps: 
       - checkout 
-      - attach_workspace:
-          at: ~/
       - run: 
           name: Install dependencies 
           command: |
-            apk add --update nodejs npm 
-            pip install awscli 
-            aws --version
-      - run:  
+            yum -y install tar 
+            yum -y install gzip
+      - attach_workspace:
+          at: ~/
+      - run: 
           name: Get old stack workflow ID 
           command: |  
             export OldWorkflowID=$(cat .circleci/files/oldworkflowid.txt)
