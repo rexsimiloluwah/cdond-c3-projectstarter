@@ -202,9 +202,16 @@ jobs:
   
   # Deploy phase 
   run-migrations:
-    executor: node 
+    executor: python
     steps:
       - checkout 
+      - run: 
+          name: Install dependencies 
+          command: |
+            apk add --update curl openssh nodejs npm
+            pip install awscli
+            npm --version
+            aws --version
       - restore_cache:
           keys: ['backend-build']
       - run:
@@ -223,8 +230,8 @@ jobs:
             then
               curl https://kvdb.io/3arjNaZ692MzYrrQgXh7S3/migration_${CIRCLE_WORKFLOW_ID:0:7} -d '1'
             fi
-      # - destroy-environment:
-      #     workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - destroy-environment:
+          workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
       - revert-database-migrations:
           workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
       
